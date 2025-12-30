@@ -6,7 +6,7 @@
 
 ### Demo Admin Account
 - **Email:** `admin@ombe.com`
-- **Password:** `admin123`
+- **Password:** `password123`
 
 ---
 
