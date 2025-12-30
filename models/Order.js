@@ -43,6 +43,18 @@ module.exports = (sequelize, DataTypes) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    paymentUrl: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
+    paymentReference: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    paymentCode: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     deliveryAddress: {
       type: DataTypes.TEXT,
       allowNull: true,

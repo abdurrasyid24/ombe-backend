@@ -32,6 +32,7 @@ app.use('/api/categories', categoryRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/payment', require('./routes/paymentRoutes'));
 
 // Health check route
 app.get('/', (req, res) => {

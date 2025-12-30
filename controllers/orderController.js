@@ -182,6 +182,58 @@ exports.createOrder = async (req, res, next) => {
       }, { transaction: t });
     }
 
+    // Generate payment if amount > 0
+    let paymentData = {};
+    if (finalTotal > 0) {
+      try {
+        const paymentService = require('../services/paymentService');
+        // Need to fetch user with Phone if not available in req.user
+        // Assuming req.user has what we need or we fetch it.
+        // The current middleware puts user in req.user but might not have all fields if token payload is small.
+        // Let's rely on req.user for now or fetch fresh if needed.
+
+        // We need to pass valid items structure
+        // The service expects array of object with product: {name}, price, quantity
+        // The orderItems array we built has {productId, quantity, price, size}. We need product name.
+        // So we need to map usage of 'items' from req.body with fetched 'product' data in loop
+
+        // Re-construct detailed items list for payment service
+        const paymentItems = [];
+        for (let i = 0; i < items.length; i++) {
+          const reqItem = items[i];
+          const product = await db.Product.findByPk(reqItem.productId);
+          if (product) {
+            paymentItems.push({
+              product: { name: product.name },
+              price: product.price,
+              quantity: reqItem.quantity
+            });
+          }
+        }
+
+        paymentData = await paymentService.createPayment({
+          finalTotal: finalTotal || totalAmount,
+          orderNumber: order.orderNumber
+        }, req.user, paymentItems, paymentMethod);
+
+        // Update order with payment info
+        order.paymentUrl = paymentData.paymentUrl;
+        order.paymentReference = paymentData.reference;
+        order.paymentCode = paymentData.paymentCode;
+        await order.save({ transaction: t });
+
+      } catch (paymentErr) {
+        console.error("Payment creation failed", paymentErr);
+        // We can either fail the order or allow it but without payment link (user has to retry)
+        // For now, let's fail the order to avoid confusion
+        await t.rollback();
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to create payment: ' + paymentErr.message
+        });
+      }
+    }
+
     await t.commit();
 
     // Fetch complete order with relations
@@ -205,7 +257,9 @@ exports.createOrder = async (req, res, next) => {
       data: completeOrder
     });
   } catch (error) {
-    await t.rollback();
+    if (t.finished !== 'commit') { // Check if not already committed
+      await t.rollback();
+    }
     next(error);
   }
 };
