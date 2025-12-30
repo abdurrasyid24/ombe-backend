@@ -39,7 +39,22 @@ class PaymentService {
 
         const merchantCode = config.merchantCode;
         const apiKey = config.apiKey;
-        const paymentAmount = parseInt(order.finalTotal); // Ensure integer
+        // CURRENCY CONVERSION (Simple Logic for Demo)
+        // If amount is small (e.g. < 1000), assume it's USD and convert to IDR
+        // Duitku requires IDR. Rate: 1 USD = 16,000 IDR
+        let finalAmount = parseInt(order.finalTotal);
+        if (finalAmount < 1000) {
+            console.log(`Amount ${finalAmount} detected as likely USD. Converting to IDR...`);
+            finalAmount = Math.ceil(order.finalTotal * 16000);
+        }
+
+        // Minimum Duitku transaction is usually Rp 10.000
+        if (finalAmount < 10000) {
+            console.log(`Amount ${finalAmount} is below minimum. Adjusting to 10,000 for Sandbox testing.`);
+            finalAmount = 10000;
+        }
+
+        const paymentAmount = finalAmount;
         const merchantOrderId = order.orderNumber;
 
         // Signature = MD5(merchantCode + merchantOrderId + paymentAmount + apiKey)
@@ -60,7 +75,7 @@ class PaymentService {
             // itemDetails: items, 
             callbackUrl: config.webhookUrl,
             returnUrl: config.returnUrl,
-            expiryPeriod: 60,
+            expiryPeriod: 1440, // 24 Hours
             signature: signature
         };
 
@@ -76,7 +91,9 @@ class PaymentService {
         const data = await response.json();
 
         if (data.statusCode !== '00') {
-            throw new Error(`Duitku Error: ${data.statusMessage}`);
+            console.error('Duitku Payment Error Response:', JSON.stringify(data, null, 2));
+            const msg = data.statusMessage || data.Message || 'Unknown Error';
+            throw new Error(`Duitku Error: ${msg}`);
         }
 
         return {
@@ -91,15 +108,8 @@ class PaymentService {
         const crypto = require('crypto');
         const merchantCode = config.merchantCode;
         const apiKey = config.apiKey;
-        const dateTime = new Date().toISOString().slice(0, 19).replace('T', ' '); // Format: YYYY-MM-DD HH:mm:ss (Approx)
-        // Duitku expects DateTime in signature but format varies. 
-        // Docs for getPaymentMethod: 
-        // URL: /api/merchant/paymentmethod/getpaymentmethod
-        // Param: merchantcode, amount, datetime, signature
-        // Signature: SHA256(merchantcode + amount + datetime + apiKey)
 
-        // Actually for Sandbox/production correct format is usually YYYY-MM-DD HH:MM:SS
-        // Let's use specific format function
+        // ... (existing date logic) ...
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -119,14 +129,27 @@ class PaymentService {
             signature: signature
         };
 
-        const response = await fetch(`${config.passportUrl}/api/merchant/paymentmethod/getpaymentmethod`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
+        try {
+            const response = await fetch(`${config.passportUrl}/api/merchant/paymentmethod/getpaymentmethod`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
 
-        const data = await response.json();
-        return data.paymentFee || [];
+            const data = await response.json();
+
+            // Check for error in getPaymentMethods response
+            // Duitku usually returns 'responseCode' in this endpoint or 'paymentFee' array
+            if (data.responseCode && data.responseCode !== '00') {
+                console.error('Duitku GetMethods Error:', data);
+                return [];
+            }
+
+            return data.paymentFee || [];
+        } catch (e) {
+            console.error('Failed to fetch payment methods:', e);
+            return [];
+        }
     }
 
     validateCallback(data) {

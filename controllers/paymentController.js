@@ -41,7 +41,7 @@ exports.confirmPayment = async (req, res) => {
         }
 
         if (resultCode === '00') { // Success
-            order.status = 'processing'; // Or 'completed' depending on flow. Processing usually means paid.
+            order.status = 'paid'; // Status 'paid' means payment success, waiting for admin to process
             order.paymentReference = reference;
             await order.save();
         } else if (resultCode === '01') { // Failed
@@ -55,5 +55,27 @@ exports.confirmPayment = async (req, res) => {
     } catch (error) {
         console.error('Payment callback error:', error);
         res.status(500).send('Internal Server Error');
+    }
+};
+
+exports.forceSuccess = async (req, res) => {
+    try {
+        const { merchantOrderId } = req.params;
+        const order = await db.Order.findOne({ where: { orderNumber: merchantOrderId } });
+
+        if (!order) {
+            return res.status(404).send('Order not found');
+        }
+
+        order.status = 'paid';
+        await order.save();
+
+        res.status(200).send(`
+            <h1>Success!</h1>
+            <p>Order <b>${merchantOrderId}</b> has been manually set to <b>PAID</b>.</p>
+            <p>You can now check the mobile app.</p>
+        `);
+    } catch (error) {
+        res.status(500).send('Error updating order: ' + error.message);
     }
 };

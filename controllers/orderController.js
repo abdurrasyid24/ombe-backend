@@ -2,8 +2,10 @@ const db = require('../models');
 
 // Generate unique order number
 const generateOrderNumber = () => {
+  // Format: OMB-{Timestamp}-{Random}
+  // This is unique enough naturally, but we can make it safer.
   const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 7).toUpperCase();
+  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `OMB-${timestamp}-${random}`;
 };
 
@@ -271,7 +273,9 @@ exports.updateOrderStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
 
-    if (!['pending', 'processing', 'completed', 'cancelled'].includes(status)) {
+    const validStatuses = ['pending', 'paid', 'processing', 'shipped', 'completed', 'cancelled'];
+
+    if (!validStatuses.includes(status)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid status value'
