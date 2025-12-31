@@ -53,8 +53,8 @@ db.sequelize.authenticate()
     .then(() => {
         console.log('✅ Database connected successfully');
 
-        // Sync database (create tables if not exist)
-        return db.sequelize.sync();
+        // Sync database (create tables if not exist, and alter if changed)
+        return db.sequelize.sync({ alter: true });
     })
     .then(() => {
         console.log('✅ Database synced');

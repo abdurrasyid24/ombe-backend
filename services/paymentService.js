@@ -163,6 +163,18 @@ class PaymentService {
 
         return calcSignature === signature;
     }
+
+    generateSignatureDebug(data) {
+        const crypto = require('crypto');
+        const { merchantCode, amount, merchantOrderId } = data;
+        const signatureStr = config.merchantCode + amount + merchantOrderId + config.apiKey;
+        const calcSignature = crypto.createHash('md5').update(signatureStr).digest('hex');
+
+        return {
+            stringToHash: signatureStr,
+            calculatedSignature: calcSignature
+        };
+    }
 }
 
 module.exports = new PaymentService();

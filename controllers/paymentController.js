@@ -24,12 +24,19 @@ exports.getPaymentList = async (req, res) => {
 exports.confirmPayment = async (req, res) => {
     try {
         const { merchantOrderId, resultCode, reference } = req.body;
+        const fs = require('fs');
 
+        const logData = `[${new Date().toISOString()}] Callback: ${JSON.stringify(req.body)}\n`;
+        fs.appendFileSync('payment_logs.txt', logData);
         console.log('Payment Callback Received:', req.body);
 
         // Validate callback signature
-        if (!paymentService.validateCallback(req.body)) {
+        const isValid = paymentService.validateCallback(req.body);
+
+        if (!isValid) {
             console.error('Invalid payment signature');
+            console.error('Expected Signature (Local):', paymentService.generateSignatureDebug(req.body));
+            console.error('Received Signature (Duitku):', req.body.signature);
             return res.status(400).send('Invalid signature');
         }
 
