@@ -237,6 +237,35 @@
         </div>
     </div>
 
+    <script>
+        // Check authentication before loading anything
+        (function() {
+            const token = localStorage.getItem('adminToken');
+            if (!token) {
+                window.location.href = '/admin/login';
+                return;
+            }
+            
+            // Optional: Verify token with server
+            fetch('https://server-ombe.codingankuu.com/api/admin/dashboard', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Token invalid or expired
+                    localStorage.removeItem('adminToken');
+                    localStorage.removeItem('adminUser');
+                    window.location.href = '/admin/login';
+                }
+            })
+            .catch(error => {
+                console.error('Auth check error:', error);
+            });
+        })();
+    </script>
     <script src="/admin/js/main.js"></script>
 </body>
 </html>

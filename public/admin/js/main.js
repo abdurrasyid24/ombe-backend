@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://server-ombe.codingankuu.com/api';
 let currentPage = 1;
 let currentStatus = '';
 
@@ -21,9 +21,12 @@ async function loadDashboard() {
     try {
         const token = getToken();
         console.log('Token from storage:', token ? 'Present' : 'Missing');
+        console.log('API URL:', `${API_BASE}/admin/dashboard`);
         
         const response = await fetch(`${API_BASE}/admin/dashboard`, {
-            headers: getHeaders()
+            method: 'GET',
+            headers: getHeaders(),
+            mode: 'cors'
         });
 
         console.log('Dashboard response status:', response.status);
@@ -53,11 +56,22 @@ async function loadDashboard() {
         loadRecentOrders(dashboard.recentOrders || []);
     } catch (error) {
         console.error('Error loading dashboard:', error);
+        console.error('Error details:', {
+            message: error.message,
+            stack: error.stack,
+            type: error.name
+        });
         document.getElementById('pendingCount').textContent = '0';
         document.getElementById('processingCount').textContent = '0';
         document.getElementById('completedCount').textContent = '0';
         document.getElementById('revenueCount').textContent = 'Rp 0';
-        document.getElementById('recentOrdersTable').innerHTML = `<tr><td colspan="6" class="text-center" style="color: red; padding: 20px;">Error: ${error.message}</td></tr>`;
+        
+        let errorMsg = error.message;
+        if (error.message.includes('Failed to fetch')) {
+            errorMsg = 'Cannot connect to server. Please check if the server is running and CORS is enabled.';
+        }
+        
+        document.getElementById('recentOrdersTable').innerHTML = `<tr><td colspan="6" class="text-center" style="color: red; padding: 20px;">Error: ${errorMsg}</td></tr>`;
     }
 }
 

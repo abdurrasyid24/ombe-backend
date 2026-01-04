@@ -163,7 +163,7 @@
                     type="email" 
                     id="email" 
                     name="email" 
-                    placeholder="admin@ombre.com"
+                    placeholder="admin@ombe.com"
                     required
                 >
             </div>
@@ -188,7 +188,7 @@
         <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; text-align: center; color: #999; font-size: 13px;">
             <p>Demo Admin Account:</p>
             <p style="margin-top: 8px; color: #666;">
-                Email: <strong>admin@ombre.com</strong><br>
+                Email: <strong>admin@ombe.com</strong><br>
                 Password: <strong>admin123</strong>
             </p>
         </div>
@@ -197,7 +197,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <script>
-        const API_BASE = 'http://localhost:5000/api';
+        const API_BASE = 'https://server-ombe.codingankuu.com/api';
 
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
@@ -235,7 +235,7 @@
                 }
 
                 // Check if user is admin
-                if (!data.data.user.isAdmin) {
+                if (data.data.user.role !== 'admin') {
                     throw new Error('You do not have admin access');
                 }
 
