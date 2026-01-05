@@ -26,6 +26,8 @@ db.Category = require('./Category')(sequelize, Sequelize);
 db.Product = require('./Product')(sequelize, Sequelize);
 db.Order = require('./Order')(sequelize, Sequelize);
 db.OrderItem = require('./OrderItem')(sequelize, Sequelize);
+db.RewardHistory = require('./RewardHistory')(sequelize, Sequelize);
+db.Notification = require('./Notification')(sequelize, Sequelize);
 
 // Associations
 Object.keys(db).forEach(modelName => {

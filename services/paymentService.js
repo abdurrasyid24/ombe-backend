@@ -64,7 +64,7 @@ class PaymentService {
         const payload = {
             merchantCode: merchantCode,
             paymentAmount: paymentAmount,
-            paymentMethod: paymentMethod, // If empty, Duitku shows selection page
+            paymentMethod: paymentMethod || 'I1', // Default to I1 (VA BNI) if empty
             merchantOrderId: merchantOrderId,
             productDetails: `Payment for Order ${order.orderNumber}`,
             additionalParam: '',

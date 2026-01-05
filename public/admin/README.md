@@ -205,7 +205,7 @@ As per project license
 
 ## 👤 Author
 
-AI Copilot
+OMBE Coffee Team
 Version 1.0.0
 December 2024
 

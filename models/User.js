@@ -43,6 +43,10 @@ module.exports = (sequelize, DataTypes) => {
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
+    },
+    rewardPoints: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0
     }
   }, {
     tableName: 'users',
@@ -71,6 +75,10 @@ module.exports = (sequelize, DataTypes) => {
     User.hasMany(models.Order, {
       foreignKey: 'userId',
       as: 'orders'
+    });
+    User.hasMany(models.RewardHistory, {
+      foreignKey: 'userId',
+      as: 'rewardHistories'
     });
   };
 

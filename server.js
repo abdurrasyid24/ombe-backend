@@ -26,6 +26,10 @@ app.use(cors());
 // Serve static files (admin panel)
 app.use(express.static('public'));
 
+// Admin panel routes (redirect to .html files)
+app.get('/admin', (req, res) => res.redirect('/admin/index.html'));
+app.get('/admin/login', (req, res) => res.redirect('/admin/login.html'));
+
 // Mount routers
 app.use('/api/auth', authRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -33,6 +37,8 @@ app.use('/api/products', productRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payment', require('./routes/paymentRoutes'));
+app.use('/api/rewards', require('./routes/rewardRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
 
 // Health check route
 app.get('/', (req, res) => {
@@ -53,14 +59,19 @@ db.sequelize.authenticate()
     .then(() => {
         console.log('✅ Database connected successfully');
 
-        // Sync database (create tables if not exist, and alter if changed)
-        return db.sequelize.sync({ alter: true });
+        // Sync database (tables already created via migrations, so just validate)
+        return db.sequelize.sync({ alter: false });
     })
     .then(() => {
         console.log('✅ Database synced');
 
-        app.listen(PORT, () => {
+        const server = app.listen(PORT, () => {
             console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+        });
+
+        // Keep server alive
+        server.on('error', (err) => {
+            console.error('Server error:', err);
         });
     })
     .catch(err => {

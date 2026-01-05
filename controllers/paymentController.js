@@ -1,5 +1,6 @@
 const db = require('../models');
 const paymentService = require('../services/paymentService');
+const { createNotification } = require('./notificationController');
 
 exports.getPaymentList = async (req, res) => {
     try {
@@ -48,9 +49,18 @@ exports.confirmPayment = async (req, res) => {
         }
 
         if (resultCode === '00') { // Success
-            order.status = 'paid'; // Status 'paid' means payment success, waiting for admin to process
+            order.status = 'paid';
             order.paymentReference = reference;
             await order.save();
+
+            // Create notification for payment success
+            await createNotification(
+              order.userId,
+              'order_paid',
+              'Payment Successful! 💳',
+              `Your payment for order ${order.orderNumber} has been confirmed. Total: Rp ${Math.round(order.finalTotal * 16000).toLocaleString()}`,
+              { orderId: order.id, orderNumber: order.orderNumber }
+            );
         } else if (resultCode === '01') { // Failed
             // order.status = 'cancelled'; // Optional: auto cancel or keep pending
             // await order.save();

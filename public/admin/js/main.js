@@ -1,7 +1,14 @@
 // API Configuration
-const API_BASE = 'https://server-ombe.codingankuu.com/api';
+const API_BASE = 'http://localhost:5000/api';
 let currentPage = 1;
 let currentStatus = '';
+let allOrders = [];
+
+// Auto-refresh configuration
+const AUTO_REFRESH_INTERVAL = 30000; // 30 seconds
+let autoRefreshTimer = null;
+let lastOrderCount = 0;
+let lastProductCount = 0;
 
 // Get token from localStorage
 function getToken() {
@@ -14,6 +21,294 @@ function getHeaders() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getToken()}`
     };
+}
+
+// Start auto-refresh
+function startAutoRefresh() {
+    if (autoRefreshTimer) clearInterval(autoRefreshTimer);
+    
+    autoRefreshTimer = setInterval(async () => {
+        const currentView = document.querySelector('.nav-link.active')?.getAttribute('href');
+        
+        if (currentView === '/admin') {
+            await silentDashboardRefresh();
+        } else if (currentView === '/admin/products') {
+            await silentProductsRefresh();
+        }
+    }, AUTO_REFRESH_INTERVAL);
+    
+    console.log('Auto-refresh started (every 30 seconds)');
+}
+
+// Stop auto-refresh
+function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+// Silent dashboard refresh (no loading indicator)
+async function silentDashboardRefresh() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/dashboard`, {
+            method: 'GET',
+            headers: getHeaders(),
+            mode: 'cors'
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const dashboard = data.data;
+        if (!dashboard) return;
+
+        // Check for new orders
+        const newOrderCount = dashboard.totalOrders || 0;
+        if (lastOrderCount > 0 && newOrderCount > lastOrderCount) {
+            showNotificationToast(`🆕 ${newOrderCount - lastOrderCount} new order(s) received!`);
+        }
+        lastOrderCount = newOrderCount;
+
+        // Update stats silently
+        document.getElementById('pendingCount').textContent = dashboard.pendingOrders || 0;
+        document.getElementById('processingCount').textContent = dashboard.processingOrders || 0;
+        document.getElementById('completedCount').textContent = dashboard.completedOrders || 0;
+        document.getElementById('revenueCount').textContent = formatCurrency(dashboard.totalRevenue || 0);
+
+        // Update orders table
+        allOrders = dashboard.recentOrders || [];
+        loadRecentOrders(allOrders);
+        
+        // Update last refresh time
+        updateLastRefreshTime();
+    } catch (error) {
+        console.error('Silent refresh error:', error);
+    }
+}
+
+// Silent products refresh
+async function silentProductsRefresh() {
+    try {
+        const response = await fetch(`${API_BASE}/admin/products?page=1&limit=10`, {
+            headers: getHeaders()
+        });
+
+        if (!response.ok) return;
+
+        const data = await response.json();
+        const products = data.data || [];
+        
+        // Check for product updates
+        if (lastProductCount > 0 && products.length !== lastProductCount) {
+            showNotificationToast('📦 Products have been updated!');
+        }
+        lastProductCount = products.length;
+        
+        // Update table
+        const tbody = document.getElementById('productsTable');
+        if (tbody && products.length > 0) {
+            tbody.innerHTML = products.map(product => `
+                <tr>
+                    <td>${product.id}</td>
+                    <td>
+                        <img src="${product.image || '/admin/img/placeholder.png'}" 
+                             alt="${product.name}" 
+                             style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px;">
+                    </td>
+                    <td><strong>${product.name}</strong></td>
+                    <td>${product.category?.name || 'N/A'}</td>
+                    <td>Rp ${formatNumber(product.price)}</td>
+                    <td>${product.stock}</td>
+                    <td><span class="status-badge status-${product.isActive ? 'completed' : 'cancelled'}">${product.isActive ? 'ACTIVE' : 'INACTIVE'}</span></td>
+                    <td>
+                        <button class="btn btn-primary btn-sm" onclick="openProductModal(${product.id})">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteProduct(${product.id})">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+        
+        updateLastRefreshTime();
+    } catch (error) {
+        console.error('Silent products refresh error:', error);
+    }
+}
+
+// Show notification toast
+function showNotificationToast(message) {
+    // Remove existing toast if any
+    const existingToast = document.getElementById('admin-toast');
+    if (existingToast) existingToast.remove();
+    
+    const toast = document.createElement('div');
+    toast.id = 'admin-toast';
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: linear-gradient(135deg, #1E6B4C, #2d9d6d);
+        color: white;
+        padding: 16px 24px;
+        border-radius: 12px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+        z-index: 10000;
+        animation: slideIn 0.3s ease-out;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    `;
+    toast.innerHTML = `
+        <span style="font-size: 18px;">🔔</span>
+        <span>${message}</span>
+    `;
+    
+    // Add animation style
+    const style = document.createElement('style');
+    style.textContent = `
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(100%); opacity: 0; }
+        }
+    `;
+    document.head.appendChild(style);
+    
+    document.body.appendChild(toast);
+    
+    // Play notification sound (optional)
+    try {
+        const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleQ4CLY3f6KeNHQUjd+jxrZkgABFs6fOxnSAAD2bq9bOdHwAPYur1s50fAA9i6vWynR8AD2Lq9bKdHwAPYur1sp0fAA9i6vWynR8AD2Lq9bKdHw==');
+        audio.volume = 0.3;
+        audio.play().catch(() => {});
+    } catch (e) {}
+    
+    // Auto remove after 5 seconds
+    setTimeout(() => {
+        toast.style.animation = 'slideOut 0.3s ease-in forwards';
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+// Update last refresh time indicator
+function updateLastRefreshTime() {
+    let indicator = document.getElementById('refresh-indicator');
+    if (!indicator) {
+        indicator = document.createElement('div');
+        indicator.id = 'refresh-indicator';
+        indicator.style.cssText = `
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(30, 107, 76, 0.9);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        `;
+        document.body.appendChild(indicator);
+    }
+    
+    const now = new Date();
+    indicator.innerHTML = `
+        <span style="display: inline-block; width: 8px; height: 8px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite;"></span>
+        Auto-refresh: ${now.toLocaleTimeString()}
+    `;
+    
+    // Add pulse animation if not exists
+    if (!document.getElementById('pulse-style')) {
+        const style = document.createElement('style');
+        style.id = 'pulse-style';
+        style.textContent = `
+            @keyframes pulse {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0.5; }
+            }
+        `;
+        document.head.appendChild(style);
+    }
+}
+
+// Manual refresh function
+async function manualRefresh() {
+    const btn = event?.target?.closest('button');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-sync-alt fa-spin"></i> Refreshing...';
+    }
+    
+    const currentView = document.querySelector('.nav-link.active')?.getAttribute('href');
+    
+    try {
+        if (currentView === '/admin') {
+            await loadDashboard();
+        } else if (currentView === '/admin/products') {
+            await loadAllProducts(1);
+        } else if (currentView === '/admin/users') {
+            await loadAllUsers(1);
+        }
+        showNotificationToast('✅ Data refreshed successfully!');
+    } catch (error) {
+        showNotificationToast('❌ Failed to refresh data');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i> Refresh';
+        }
+    }
+}
+
+// Initialize date filter with max 3 months back
+function initDateFilter() {
+    const today = new Date();
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(today.getMonth() - 3);
+    
+    const startDateInput = document.getElementById('startDate');
+    const endDateInput = document.getElementById('endDate');
+    
+    if (startDateInput && endDateInput) {
+        endDateInput.value = today.toISOString().split('T')[0];
+        startDateInput.value = threeMonthsAgo.toISOString().split('T')[0];
+        startDateInput.min = threeMonthsAgo.toISOString().split('T')[0];
+        endDateInput.max = today.toISOString().split('T')[0];
+    }
+}
+
+// Apply date filter
+function applyDateFilter() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    if (!startDate || !endDate) {
+        alert('Please select both start and end dates');
+        return;
+    }
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    end.setHours(23, 59, 59, 999);
+    
+    const filtered = allOrders.filter(order => {
+        const orderDate = new Date(order.createdAt);
+        return orderDate >= start && orderDate <= end;
+    });
+    
+    loadRecentOrders(filtered);
+}
+
+// Reset date filter
+function resetDateFilter() {
+    initDateFilter();
+    loadRecentOrders(allOrders);
 }
 
 // Load Dashboard
@@ -52,8 +347,10 @@ async function loadDashboard() {
         document.getElementById('completedCount').textContent = dashboard.completedOrders || 0;
         document.getElementById('revenueCount').textContent = formatCurrency(dashboard.totalRevenue || 0);
 
-        // Load recent orders
-        loadRecentOrders(dashboard.recentOrders || []);
+        // Store orders for filtering and load
+        allOrders = dashboard.recentOrders || [];
+        initDateFilter();
+        loadRecentOrders(allOrders);
     } catch (error) {
         console.error('Error loading dashboard:', error);
         console.error('Error details:', {
@@ -87,7 +384,7 @@ function loadRecentOrders(orders) {
     tbody.innerHTML = orders.map(order => `
         <tr>
             <td><strong>${order.orderNumber}</strong></td>
-            <td>${order.user?.fullName || 'N/A'}</td>
+            <td>${order.user?.fullName || order.user?.email || 'N/A'}</td>
             <td>Rp ${formatNumber(order.finalTotal)}</td>
             <td><span class="status-badge status-${order.status}">${order.status.toUpperCase()}</span></td>
             <td>${formatDate(order.createdAt)}</td>
@@ -276,7 +573,7 @@ async function showOrderDetailModal(promise) {
                     </div>
                     <div class="detail-row">
                         <span class="detail-label">Delivery Address:</span>
-                        <span class="detail-value">${order.deliveryAddress || 'N/A'}</span>
+                        <span class="detail-value">${formatDeliveryAddress(order.deliveryAddress)}</span>
                     </div>
                 </div>
             </div>
@@ -375,12 +672,6 @@ async function updateOrderStatus(orderId, newStatus) {
         // Reload the order detail
         openOrderDetail(orderId);
 
-        // Reload orders list if on orders page
-        const ordersView = document.getElementById('ordersView');
-        if (ordersView && ordersView.style.display !== 'none') {
-            loadAllOrders(currentPage, currentStatus);
-        }
-
         // Reload dashboard
         const dashboardView = document.getElementById('dashboardView');
         if (dashboardView && dashboardView.style.display !== 'none') {
@@ -392,20 +683,54 @@ async function updateOrderStatus(orderId, newStatus) {
     }
 }
 
-// Format Currency
+// Conversion rate USD to IDR
+const USD_TO_IDR = 16000;
+
+// Format Currency (converts from USD to IDR)
 function formatCurrency(value) {
+    const idrValue = (value || 0) * USD_TO_IDR;
     return new Intl.NumberFormat('id-ID', {
         style: 'currency',
         currency: 'IDR',
         minimumFractionDigits: 0
-    }).format(value);
+    }).format(idrValue);
 }
 
-// Format Number
+// Format Number (converts from USD to IDR)
 function formatNumber(value) {
+    const idrValue = (value || 0) * USD_TO_IDR;
     return new Intl.NumberFormat('id-ID', {
         minimumFractionDigits: 0
-    }).format(value);
+    }).format(idrValue);
+}
+
+// Format Delivery Address
+function formatDeliveryAddress(address) {
+    if (!address) return 'N/A';
+    if (typeof address === 'string') {
+        // Try to parse if it's a JSON string
+        try {
+            address = JSON.parse(address);
+        } catch (e) {
+            return address; // It's just a plain string
+        }
+    }
+    if (typeof address === 'object') {
+        // Format object address
+        const parts = [];
+        if (address.address || address.street) parts.push(address.address || address.street);
+        if (address.city) parts.push(address.city);
+        if (address.state || address.province) parts.push(address.state || address.province);
+        if (address.postalCode || address.zipCode) parts.push(address.postalCode || address.zipCode);
+        if (address.country) parts.push(address.country);
+        
+        if (parts.length > 0) return parts.join(', ');
+        
+        // If no known fields, try to stringify nicely
+        const allValues = Object.values(address).filter(v => v && typeof v !== 'object');
+        return allValues.length > 0 ? allValues.join(', ') : 'N/A';
+    }
+    return String(address);
 }
 
 // Format Date
@@ -481,28 +806,167 @@ async function loadAllProducts(page = 1) {
         const tbody = document.getElementById('productsTable');
         
         if (!products || products.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center">No products found</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center">No products found</td></tr>';
         } else {
             tbody.innerHTML = products.map(product => `
                 <tr>
                     <td>${product.id}</td>
+                    <td><img src="${product.image || '/images/placeholder.png'}" alt="${product.name}" style="width: 50px; height: 50px; object-fit: cover; border-radius: 4px;"></td>
                     <td><strong>${product.name}</strong></td>
                     <td>${product.category?.name || 'N/A'}</td>
                     <td>Rp ${formatNumber(product.price)}</td>
                     <td>${product.stock}</td>
                     <td><span class="badge" style="background: ${product.isFeatured ? '#2196f3' : '#ccc'}; color: white; padding: 4px 8px; border-radius: 3px; font-size: 12px;">${product.isFeatured ? 'YES' : 'NO'}</span></td>
                     <td><span class="badge" style="background: ${product.isActive ? '#4caf50' : '#f44336'}; color: white; padding: 4px 8px; border-radius: 3px; font-size: 12px;">${product.isActive ? 'ACTIVE' : 'INACTIVE'}</span></td>
-                    <td>${formatDate(product.createdAt)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-primary" onclick="editProduct(${product.id})"><i class="fas fa-edit"></i></button>
+                        <button class="btn btn-sm btn-danger" onclick="deleteProduct(${product.id})"><i class="fas fa-trash"></i></button>
+                    </td>
                 </tr>
             `).join('');
         }
 
-        // Load pagination
         loadPagination(pagination, 'loadAllProducts', 'productsPagination');
     } catch (error) {
         console.error('Error loading products:', error);
         const tbody = document.getElementById('productsTable');
-        tbody.innerHTML = `<tr><td colspan="8" class="text-center" style="color: red; padding: 20px;">Error: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="color: red; padding: 20px;">Error: ${error.message}</td></tr>`;
+    }
+}
+
+let categories = [];
+
+async function loadCategories() {
+    try {
+        const response = await fetch(`${API_BASE}/categories`, {
+            headers: getHeaders()
+        });
+        if (response.ok) {
+            const data = await response.json();
+            categories = data.data || [];
+            const select = document.getElementById('productCategory');
+            if (select) {
+                select.innerHTML = '<option value="">Select Category</option>' +
+                    categories.map(cat => `<option value="${cat.id}">${cat.name}</option>`).join('');
+            }
+        }
+    } catch (error) {
+        console.error('Error loading categories:', error);
+    }
+}
+
+function openProductModal(product = null) {
+    loadCategories();
+    const modal = document.getElementById('productModal');
+    const title = document.getElementById('productModalTitle');
+    const form = document.getElementById('productForm');
+    
+    form.reset();
+    document.getElementById('productId').value = '';
+    document.getElementById('currentImage').innerHTML = '';
+    
+    if (product) {
+        title.textContent = 'Edit Product';
+        document.getElementById('productId').value = product.id;
+        document.getElementById('productName').value = product.name || '';
+        document.getElementById('productDescription').value = product.description || '';
+        document.getElementById('productPrice').value = product.price || 0;
+        document.getElementById('productStock').value = product.stock || 0;
+        document.getElementById('productCategory').value = product.categoryId || '';
+        document.getElementById('productRating').value = product.rating || '';
+        document.getElementById('productFeatured').checked = product.isFeatured || false;
+        document.getElementById('productActive').checked = product.isActive !== false;
+        if (product.image) {
+            document.getElementById('currentImage').innerHTML = `<img src="${product.image}" alt="Current" style="max-width: 100px; max-height: 100px; border-radius: 4px;">`;
+        }
+    } else {
+        title.textContent = 'Add Product';
+    }
+    
+    modal.classList.add('active');
+}
+
+function closeProductModal() {
+    document.getElementById('productModal').classList.remove('active');
+}
+
+async function editProduct(id) {
+    try {
+        const response = await fetch(`${API_BASE}/products/${id}`, {
+            headers: getHeaders()
+        });
+        if (!response.ok) throw new Error('Failed to load product');
+        const data = await response.json();
+        openProductModal(data.data);
+    } catch (error) {
+        alert('Failed to load product: ' + error.message);
+    }
+}
+
+async function saveProduct(event) {
+    event.preventDefault();
+    
+    const id = document.getElementById('productId').value;
+    const isEdit = !!id;
+    
+    const formData = new FormData();
+    formData.append('name', document.getElementById('productName').value);
+    formData.append('description', document.getElementById('productDescription').value);
+    formData.append('price', document.getElementById('productPrice').value);
+    formData.append('stock', document.getElementById('productStock').value);
+    formData.append('categoryId', document.getElementById('productCategory').value);
+    formData.append('rating', document.getElementById('productRating').value || 0);
+    formData.append('isFeatured', document.getElementById('productFeatured').checked);
+    formData.append('isActive', document.getElementById('productActive').checked);
+    
+    const imageFile = document.getElementById('productImage').files[0];
+    if (imageFile) {
+        formData.append('image', imageFile);
+    }
+    
+    try {
+        const url = isEdit ? `${API_BASE}/products/${id}` : `${API_BASE}/products`;
+        const method = isEdit ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
+            headers: {
+                'Authorization': `Bearer ${getToken()}`
+            },
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to save product');
+        }
+        
+        alert(isEdit ? 'Product updated successfully!' : 'Product created successfully!');
+        closeProductModal();
+        loadAllProducts();
+    } catch (error) {
+        alert('Failed to save product: ' + error.message);
+    }
+}
+
+async function deleteProduct(id) {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/products/${id}`, {
+            method: 'DELETE',
+            headers: getHeaders()
+        });
+        
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.message || 'Failed to delete product');
+        }
+        
+        alert('Product deleted successfully!');
+        loadAllProducts();
+    } catch (error) {
+        alert('Failed to delete product: ' + error.message);
     }
 }
 
@@ -557,7 +1021,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
             // Hide all views
             document.getElementById('dashboardView').style.display = 'none';
-            document.getElementById('ordersView').style.display = 'none';
             document.getElementById('usersView').style.display = 'none';
             document.getElementById('productsView').style.display = 'none';
 
@@ -566,10 +1029,6 @@ document.addEventListener('DOMContentLoaded', function() {
             if (href === '/admin') {
                 document.getElementById('dashboardView').style.display = 'block';
                 loadDashboard();
-            } else if (href === '/admin/orders') {
-                document.getElementById('ordersView').style.display = 'block';
-                currentPage = 1;
-                loadAllOrders(1, '');
             } else if (href === '/admin/users') {
                 document.getElementById('usersView').style.display = 'block';
                 loadAllUsers(1);
@@ -578,13 +1037,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 loadAllProducts(1);
             }
         });
-    });
-
-    // Status filter
-    document.getElementById('statusFilter')?.addEventListener('change', function() {
-        currentStatus = this.value;
-        currentPage = 1;
-        loadAllOrders(1, currentStatus);
     });
 
     // Search filter
@@ -618,9 +1070,29 @@ document.addEventListener('DOMContentLoaded', function() {
     // Logout button
     document.getElementById('logoutBtn')?.addEventListener('click', function() {
         if (confirm('Are you sure you want to logout?')) {
+            stopAutoRefresh();
             localStorage.removeItem('adminToken');
             localStorage.removeItem('adminUser');
             window.location.href = '/admin/login';
+        }
+    });
+
+    // Start auto-refresh after page loads
+    startAutoRefresh();
+    
+    // Handle visibility change (pause when tab is hidden)
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopAutoRefresh();
+        } else {
+            startAutoRefresh();
+            // Immediate refresh when tab becomes visible
+            const currentView = document.querySelector('.nav-link.active')?.getAttribute('href');
+            if (currentView === '/admin') {
+                silentDashboardRefresh();
+            } else if (currentView === '/admin/products') {
+                silentProductsRefresh();
+            }
         }
     });
 });

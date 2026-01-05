@@ -1,4 +1,6 @@
 const { Order, OrderItem, Product, User } = require('../models');
+const { addRewardPoints } = require('./rewardController');
+const { createNotification } = require('./notificationController');
 
 // Get dashboard stats
 exports.getDashboard = async (req, res) => {
@@ -150,6 +152,33 @@ exports.updateOrderStatus = async (req, res) => {
     const oldStatus = order.status;
     order.status = status;
     await order.save();
+
+    // Send notification for status update
+    const statusMessages = {
+      'processing': { title: 'Order is Being Prepared! ☕', message: `Your order ${order.orderNumber} is now being prepared.` },
+      'completed': { title: 'Order Completed! 🎉', message: `Your order ${order.orderNumber} has been completed. Enjoy your coffee!` },
+      'cancelled': { title: 'Order Cancelled ❌', message: `Your order ${order.orderNumber} has been cancelled.` }
+    };
+
+    if (statusMessages[status]) {
+      await createNotification(
+        order.userId,
+        'order_update',
+        statusMessages[status].title,
+        statusMessages[status].message,
+        { orderId: order.id, orderNumber: order.orderNumber, oldStatus, newStatus: status }
+      );
+    }
+
+    // Add reward points when order is completed (1.5% of total)
+    if (status === 'completed' && oldStatus !== 'completed') {
+      await addRewardPoints(
+        order.userId,
+        order.id,
+        order.finalTotal,
+        `Points from order ${order.orderNumber}`
+      );
+    }
 
     res.status(200).json({
       success: true,

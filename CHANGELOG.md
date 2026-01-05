@@ -299,7 +299,7 @@ Backend:
 **Version**: 1.0.0
 **Release Date**: December 26, 2024
 **Status**: ✅ Stable / Production Ready
-**Author**: AI Copilot
+**Author**: OMBE Coffee Team
 **License**: As per project license
 
 ### 🎯 Design Decisions
