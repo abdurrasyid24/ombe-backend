@@ -44,6 +44,11 @@ module.exports = {
         type: Sequelize.BOOLEAN,
         defaultValue: true
       },
+      rewardPoints: {
+        type: Sequelize.INTEGER,
+        defaultValue: 0,
+        allowNull: false
+      },
       createdAt: {
         allowNull: false,
         type: Sequelize.DATE

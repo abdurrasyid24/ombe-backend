@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = 'https://server-ombe.codingankuu.com/api';
 let currentPage = 1;
 let currentStatus = '';
 let allOrders = [];
